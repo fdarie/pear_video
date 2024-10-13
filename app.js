@@ -178,20 +178,6 @@ async function startVideoStreaming() {
             document.getElementById('peers-count').textContent = currentConnections.length;
 
             console.log(`Current active connections: ${currentConnections.length}`);
-            rearrangeCanvases();
-        }
-
-        function rearrangeCanvases() {
-            const videoContainer = document.querySelector('.video-container');
-            const canvasWrappers = videoContainer.querySelectorAll('.canvas-wrapper');
-            const totalCanvases = canvasWrappers.length;
-        
-            // Calculate the ideal number of columns (minimum 2)
-            const columns = Math.max(2, Math.ceil(Math.sqrt(totalCanvases)));
-        
-            canvasWrappers.forEach((wrapper) => {
-                wrapper.style.width = `calc(${100 / columns}% - 20px)`;
-            });
         }
 
         function createRemoteCanvas(connection) {
