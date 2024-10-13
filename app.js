@@ -127,13 +127,18 @@ async function startVideoStreaming() {
                     if (!isKeyFrame && decodeKeyFrameRequired)
                         return;
 
-                    const chunk = new EncodedVideoChunk({
-                        type: isKeyFrame ? 'key' : 'delta',
-                        timestamp: performance.now() * 1000,
-                        data: new Uint8Array(videoData)
-                    });
-                    decoder.decode(chunk);
-                    decodeKeyFrameRequired = false;
+                    try {
+                        const chunk = new EncodedVideoChunk({
+                            type: isKeyFrame ? 'key' : 'delta',
+                            timestamp: performance.now() * 1000,
+                            data: new Uint8Array(videoData)
+                        });
+                        decoder.decode(chunk);
+                        decodeKeyFrameRequired = false;
+                    } catch (error) {
+                        console.error('Error decoding video chunk:', error);
+                        decodeKeyFrameRequired = true;
+                    }
                 }
             });
 
