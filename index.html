@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <style>
+        body>h1:nth-of-type(1) {
+            cursor: pointer
+        }
+
+        #bar {
+            background: rgba(55, 60, 72, 0.6);
+            backdrop-filter: blur(64px);
+            -webkit-app-region: drag;
+            height: var(--title-bar-height);
+            padding: 0;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            color: #FFF;
+            white-space: nowrap;
+            box-sizing: border-box;
+            position: fixed;
+            z-index: 2;
+            width: 100%;
+            left: 0;
+            top: 0;
+        }
+
+        pear-ctrl[data-platform=darwin] {
+            margin-top: 18px;
+            margin-left: 12px;
+        }
+
+        body {
+            --title-bar-height: 42px;
+            padding-top: var(--title-bar-height);
+        }
+
+        main {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: white;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .canvas-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            background-color: #fff;
+        }
+
+        #peers-count-container {
+            margin-top: 10px;
+        }
+
+        .fullscreen-wrapper {
+            width: 100% !important;
+            height: 100% !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .fullscreen-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 0;
+        }
+    </style>
+    <script type="module" src="./app.js"></script>
+</head>
+
+<body>
+    <div id="bar"><pear-ctrl></pear-ctrl></div>
+    <main>
+        <div class="video-container">
+            <div class="canvas-wrapper">
+                <canvas id="localCanvas"></canvas>
+                <div class="canvas-label">Local Video</div>
+            </div>
+        </div>
+        <div id="peers-count-container">
+            Peers: <span id="peers-count">0</span>
+        </div>
+    </main>
+</body>
+
+</html>
