@@ -29,6 +29,7 @@
   "dependencies": {
     "b4a": "^1.6.7",
     "hypercore-crypto": "^3.4.2",
-    "hyperswarm": "^4.8.4"
+    "hyperswarm": "^4.8.4",
+    "pear-inspect": "^1.2.0"
   }
 }

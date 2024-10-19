@@ -102,14 +102,6 @@ async function startVideoStreaming() {
             setTimeout(encodeFrame, frameInterval);
         }
 
-        const topic = Buffer.alloc(32).fill('p2p-video-sharing');
-        console.log('Topic buffer created:', topic);
-
-        const discovery = swarm.join(topic, { client: true, server: true });
-        discovery.flushed();
-
-        console.log('Joined the P2P swarm with topic.');
-
         swarm.on('connection', (connection, info) => {
             console.log('Peer connected! Info:', info);
 
@@ -181,7 +173,6 @@ async function startVideoStreaming() {
 
             // Update peer count
             document.getElementById('peers-count').textContent = currentConnections.length;
-
             console.log(`Current active connections: ${currentConnections.length}`);
         }
 
@@ -219,6 +210,14 @@ async function startVideoStreaming() {
             connection.decoder = decoder;
             console.log(`Decoder configured for connection ${connection.id}.`);
         }
+
+        const topic = Buffer.alloc(32).fill('p2p-video-sharing');
+        console.log('Topic buffer created:', topic);
+
+        const discovery = swarm.join(topic, { client: true, server: true });
+        discovery.flushed();
+
+        console.log('Joined the P2P swarm with topic.');
 
     } catch (error) {
         console.error('Error accessing display media:', error);
