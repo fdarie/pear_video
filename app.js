@@ -144,15 +144,29 @@ async function startVideoStreaming() {
             encodingActive = true;
         });
 
-        function handleEncodedFrame(chunk) {
-            currentConnections.forEach((connection) => {
-                if (encodingActive) {
-                    const chunkData = new Uint8Array(chunk.byteLength + 1);
-                    chunkData[0] = chunk.type === 'key' ? 1 : 0; // Prepend key frame metadata
-                    // Copy the chunk data starting from index 1
-                    chunk.copyTo(new Uint8Array(chunkData.buffer, 1));
-                    connection.write(chunkData);
+        async function handleEncodedFrame(chunk) {
+            if (!encodingActive) return;
+
+            const chunkData = new Uint8Array(chunk.byteLength + 1);
+            chunkData[0] = chunk.type === 'key' ? 1 : 0; // Prepend key frame metadata
+            chunk.copyTo(new Uint8Array(chunkData.buffer, 1));
+
+            const writePromises = currentConnections.map(async (connection) => {
+                try {
+                    await connection.write(chunkData);
+                } catch (error) {
+                    console.error(`Failed to write to connection ${connection.id}:`, error);
+                    // Mark the connection for removal
+                    return { connection, error };
                 }
+            });
+
+            const results = await Promise.all(writePromises);
+
+            // Handle any failed connections
+            const failedConnections = results.filter(result => result && result.error);
+            failedConnections.forEach(({ connection, error }) => {
+                handleConnectionClose(connection, 'write error', error);
             });
         }
 
