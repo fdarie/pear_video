@@ -1,5 +1,5 @@
 // app.js (Entry point)
-import { initializeSwarm, startVideoStreaming } from './streaming.js';
+import { initializeSwarm, startMediaStreaming } from './streaming.js';
 import { setupUIEvents } from './ui.js';
 
 const { teardown, updates } = Pear;
@@ -10,7 +10,7 @@ console.log('Hyperswarm instance created.');
 teardown(() => swarm.destroy());
 updates(() => Pear.reload());
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setupUIEvents();
-  startVideoStreaming(swarm);
+  await startMediaStreaming(swarm);
 });

@@ -4,7 +4,7 @@
 <head>
     <style>
         body>h1:nth-of-type(1) {
-            cursor: pointer
+            cursor: pointer;
         }
 
         #bar {
@@ -40,7 +40,7 @@
             flex-direction: column;
             height: 100vh;
             color: white;
-            justify-content: center;
+            justify-content: flex-start;
             align-items: center;
             gap: 20px;
         }
@@ -50,25 +50,28 @@
             flex-wrap: wrap;
             gap: 20px;
             padding: 20px;
+            width: 100%;
+            justify-content: center;
         }
 
-        .canvas-wrapper {
+        .video-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
             width: 45%;
         }
 
-        canvas {
+        video {
             border: 2px solid #333;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             width: 100%;
-            background-color: #fff;
+            background-color: #000;
         }
 
         #peers-count-container {
             margin-top: 10px;
+            color: #FFF;
         }
 
         .fullscreen-wrapper {
@@ -84,10 +87,16 @@
             align-items: center;
         }
 
-        .fullscreen-canvas {
+        .fullscreen-video {
             width: 100% !important;
             height: 100% !important;
             border-radius: 0;
+        }
+
+        .video-label {
+            margin-top: 5px;
+            color: #FFF;
+            font-size: 16px;
         }
     </style>
     <script type="module" src="./app.js"></script>
@@ -97,10 +106,11 @@
     <div id="bar"><pear-ctrl></pear-ctrl></div>
     <main>
         <div class="video-container">
-            <div class="canvas-wrapper">
-                <canvas id="localCanvas"></canvas>
-                <div class="canvas-label">Local Video</div>
+            <div class="video-wrapper">
+                <video id="localVideo" muted autoplay playsinline></video>
+                <div class="video-label">Local Video</div>
             </div>
+            <!-- Remote videos will be added here dynamically -->
         </div>
         <div id="peers-count-container">
             Peers: <span id="peers-count">0</span>
