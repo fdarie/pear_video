@@ -1,4 +1,4 @@
-# Evaluating Pear Runtime for Screen Sharing Application
+# Evaluating Screen Sharing Application using Pear Runtime
 
 First attempt to have a P2P screen sharing using Pear Runtime.
 
@@ -47,6 +47,5 @@ First attempt to have a P2P screen sharing using Pear Runtime.
 
    ```bash
    pear run .
-
    
 
