@@ -13,7 +13,7 @@ First attempt to have a P2P screen sharing using Pear Runtime.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v14 or higher)
-- [Pear Runtime](https://github.com/holepunchto/pear-desktop)
+- [Pear Runtime](https://docs.pears.com/guides/getting-started)
 - [Git](https://git-scm.com/)
 
 ### Steps
