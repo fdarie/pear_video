@@ -23,27 +23,23 @@ First attempt to have a P2P screen sharing using Pear Runtime.
    ```bash
    git clone https://github.com/fdarie/pear_video.git
 
-2. **Clone the Repository**
-
-   ```bash
-   cd pear_video
    
-3. **Navigate to the Project Directory**
+2. **Navigate to the Project Directory**
 
    ```bash
-   git clone https://github.com/fdarie/pear_video.git
+  cd pear_video
 
-4. **Install dependencies**
+3. **Install dependencies**
 
    ```bash
    npm install
 
-5. **Change the topic name**
+4. **Change the topic name**
 
    ```bash
    https://github.com/fdarie/pear_video/blob/main/streaming.js#L127
 
-6. **Run two or more instances of the app**
+5. **Run two or more instances of the app**
 
    ```bash
    pear run .
