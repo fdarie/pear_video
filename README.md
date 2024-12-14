@@ -27,7 +27,7 @@ First attempt to have a P2P screen sharing using Pear Runtime.
 2. **Navigate to the Project Directory**
 
    ```bash
-  cd pear_video
+   cd pear_video
 
 3. **Install dependencies**
 
