@@ -124,7 +124,7 @@ export async function startMediaStreaming(swarm) {
     });
 
     // Join Swarm
-    const topic = Buffer.alloc(32).fill('p2p-media-sharing');
+    const topic = Buffer.alloc(32).fill('p2p-screen-sharing');
     console.log('Topic buffer created:', topic);
 
     const discovery = swarm.join(topic, { client: true, server: true });
