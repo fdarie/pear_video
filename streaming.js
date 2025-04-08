@@ -1,6 +1,9 @@
 // streaming.js (Handles video and audio streaming logic)
 import Hyperswarm from 'hyperswarm';
 
+// Global flag to enable/disable audio (set to false to disable audio)
+const ENABLE_AUDIO = false;
+
 let videoEncoder = null;
 let audioEncoder = null;
 let videoReader = null;
@@ -43,7 +46,7 @@ async function getDesktopSourcesWithRetry(options, retryInterval = 1000, maxRetr
 export async function startMediaStreaming(swarm) {
   try {
     const options = { types: ['screen'] };
-    
+
     // Poll Pear.media.desktopSources until we get valid sources
     const sources = await getDesktopSourcesWithRetry(options);
     console.log('Successfully retrieved sources:', sources);
@@ -62,16 +65,21 @@ export async function startMediaStreaming(swarm) {
         }
       }
     });
-    
-    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    let audioStream = null;
+    if (ENABLE_AUDIO) {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
     console.log('Screen and audio streams captured successfully:', stream, audioStream);
 
     // Get video and audio tracks
     const videoTrack = stream.getVideoTracks()[0];
-    const audioTrack = audioStream.getAudioTracks()[0];
+    const audioTrack = ENABLE_AUDIO && audioStream ? audioStream.getAudioTracks()[0] : null;
 
     console.assert(videoTrack != null, 'Video track should not be null!');
-    console.assert(audioTrack != null, 'Audio track should not be null!');
+    if (ENABLE_AUDIO) {
+      console.assert(audioTrack != null, 'Audio track should not be null!');
+    }
 
     // Elements
     const localVideo = document.getElementById('localVideo');
@@ -82,8 +90,10 @@ export async function startMediaStreaming(swarm) {
     videoReader = videoProcessor.readable.getReader();
 
     // Audio Track Processor and Reader
-    const audioProcessor = new MediaStreamTrackProcessor({ track: audioTrack });
-    audioReader = audioProcessor.readable.getReader();
+    if (ENABLE_AUDIO && audioTrack) {
+      const audioProcessor = new MediaStreamTrackProcessor({ track: audioTrack });
+      audioReader = audioProcessor.readable.getReader();
+    }
 
     // Encoders
     videoEncoder = new VideoEncoder({
@@ -91,10 +101,12 @@ export async function startMediaStreaming(swarm) {
       error: (err) => console.error('Video Encoder error:', err),
     });
 
-    audioEncoder = new AudioEncoder({
-      output: handleEncodedAudioChunk,
-      error: (err) => console.error('Audio Encoder error:', err),
-    });
+    if (ENABLE_AUDIO) {
+      audioEncoder = new AudioEncoder({
+        output: handleEncodedAudioChunk,
+        error: (err) => console.error('Audio Encoder error:', err),
+      });
+    }
 
     // Configure Video Encoder
     videoSettings = videoTrack.getSettings();
@@ -110,18 +122,22 @@ export async function startMediaStreaming(swarm) {
     });
 
     // Configure Audio Encoder
-    const audioSettings = audioTrack.getSettings();
-    audioEncoder.configure({
-      codec: 'opus',
-      sampleRate: audioSettings.sampleRate || 48000,
-      numberOfChannels: audioSettings.channelCount || 2,
-      bitrate: 128000,
-    });
+    if (ENABLE_AUDIO && audioTrack) {
+      const audioSettings = audioTrack.getSettings();
+      audioEncoder.configure({
+        codec: 'opus',
+        sampleRate: audioSettings.sampleRate || 48000,
+        numberOfChannels: audioSettings.channelCount || 2,
+        bitrate: 128000,
+      });
+    }
 
     // Start Reading and Encoding Video and Audio Frames
     encodingActive = true;
     readAndEncodeVideoFrames();
-    readAndEncodeAudioFrames();
+    if (ENABLE_AUDIO) {
+      readAndEncodeAudioFrames();
+    }
 
     // Handle Swarm Connections
     swarm.on('connection', async (connection, info) => {
@@ -175,12 +191,13 @@ async function readAndEncodeVideoFrames() {
 }
 
 async function readAndEncodeAudioFrames() {
+  if (!ENABLE_AUDIO) return;
   while (encodingActive) {
     const result = await audioReader.read();
     if (result.done) break;
     const frame = result.value;
     if (audioEncoder.state !== 'configured') {
-      frame.close(); 
+      frame.close();
       return;
     }
     audioEncoder.encode(frame);
@@ -200,7 +217,7 @@ async function handleEncodedVideoChunk(chunk) {
 }
 
 async function handleEncodedAudioChunk(chunk) {
-  if (!encodingActive) return;
+  if (!ENABLE_AUDIO || !encodingActive) return;
 
   const chunkData = new Uint8Array(chunk.byteLength + 1);
   chunkData[0] = 2; // Type 2 for audio
@@ -250,7 +267,7 @@ function handleIncomingData(connection, chunkData) {
         decodeKeyFrameRequired = true;
       }
     }
-  } else if (type === 2) {
+  } else if (ENABLE_AUDIO && type === 2) {
     const audioData = chunkData.slice(1);
     const audioDecoder = connection.audioDecoder;
 
@@ -281,12 +298,22 @@ function createRemoteMediaElements(connection) {
   document.querySelector('.video-container').appendChild(remoteVideoWrapper);
 
   const videoGenerator = new MediaStreamTrackGenerator({ kind: 'video' });
-  const audioGenerator = new MediaStreamTrackGenerator({ kind: 'audio' });
+  let audioGenerator = null;
+  if (ENABLE_AUDIO) {
+    audioGenerator = new MediaStreamTrackGenerator({ kind: 'audio' });
+  }
 
   const videoWritable = videoGenerator.writable.getWriter();
-  const audioWritable = audioGenerator.writable.getWriter();
+  let audioWritable = null;
+  if (ENABLE_AUDIO && audioGenerator) {
+    audioWritable = audioGenerator.writable.getWriter();
+  }
 
-  const remoteStream = new MediaStream([videoGenerator, audioGenerator]);
+  const tracks = [videoGenerator];
+  if (ENABLE_AUDIO && audioGenerator) {
+    tracks.push(audioGenerator);
+  }
+  const remoteStream = new MediaStream(tracks);
   remoteVideo.srcObject = remoteStream;
 
   const videoDecoder = new VideoDecoder({
@@ -308,19 +335,22 @@ function createRemoteMediaElements(connection) {
     optimizeForLatency: true,
   });
 
-  const audioDecoder = new AudioDecoder({
-    output: (frame) => {
-      audioWritable.write(frame).catch((e) => console.error('Audio write error:', e));
-      frame.close();
-    },
-    error: (err) => console.error('Audio Decoder error:', err),
-  });
+  let audioDecoder = null;
+  if (ENABLE_AUDIO) {
+    audioDecoder = new AudioDecoder({
+      output: (frame) => {
+        audioWritable.write(frame).catch((e) => console.error('Audio write error:', e));
+        frame.close();
+      },
+      error: (err) => console.error('Audio Decoder error:', err),
+    });
 
-  audioDecoder.configure({
-    codec: 'opus',
-    sampleRate: 48000,
-    numberOfChannels: 2,
-  });
+    audioDecoder.configure({
+      codec: 'opus',
+      sampleRate: 48000,
+      numberOfChannels: 2,
+    });
+  }
 
   connection.videoDecoder = videoDecoder;
   connection.audioDecoder = audioDecoder;
