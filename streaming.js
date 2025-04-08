@@ -9,28 +9,51 @@ let encodingActive = false;
 let currentConnections = [];
 let encodeKeyFrameRequired = true;
 let decodeKeyFrameRequired = true;
-let videoSettings = null
-
+let videoSettings = null;
 
 export function initializeSwarm() {
   return new Hyperswarm();
 }
 
+// Helper function to poll Pear.media.desktopSources until it returns sources
+async function getDesktopSourcesWithRetry(options, retryInterval = 1000, maxRetries = 30) {
+  let attempts = 0;
+
+  while (attempts < maxRetries) {
+    try {
+      const sources = await Pear.media.desktopSources(options);
+      console.log(`Attempt ${attempts + 1}: Raw sources from Pear:`, sources);
+
+      if (sources && sources.length > 0) {
+        return sources; // Success: non-null and non-empty
+      }
+
+      console.warn(`No sources available on attempt ${attempts + 1}. Retrying in ${retryInterval}ms...`);
+    } catch (error) {
+      console.error(`Attempt ${attempts + 1} failed:`, error);
+    }
+
+    attempts++;
+    await new Promise(resolve => setTimeout(resolve, retryInterval)); // Wait before retrying
+  }
+
+  throw new Error(`Failed to get desktop sources after ${maxRetries} attempts.`);
+}
+
 export async function startMediaStreaming(swarm) {
   try {
     const options = { types: ['screen'] };
-    const sources = await Pear.media.desktopSources(options);
-    console.log('Available sources:', sources);
+    
+    // Poll Pear.media.desktopSources until we get valid sources
+    const sources = await getDesktopSourcesWithRetry(options);
+    console.log('Successfully retrieved sources:', sources);
 
-
-    if (!sources || sources.length === 0) {
-      throw new Error('No desktop sources available.');
-    }
-
+    // Auto-select a screen source or default to the first one
     const selectedSource = sources.find(source => source.name.toLowerCase().includes('screen')) || sources[0];
     const sourceId = selectedSource.id;
     console.log('Selected source:', selectedSource);
 
+    // Request the media stream with the selected source
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         mandatory: {
@@ -41,19 +64,18 @@ export async function startMediaStreaming(swarm) {
     });
     
     const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    console.log('Screen stream captured successfully:', stream);
+    console.log('Screen and audio streams captured successfully:', stream, audioStream);
 
     // Get video and audio tracks
     const videoTrack = stream.getVideoTracks()[0];
     const audioTrack = audioStream.getAudioTracks()[0];
 
-    console.assert(audioTrack != null, 'Audio tracker should not be null!');
+    console.assert(videoTrack != null, 'Video track should not be null!');
+    console.assert(audioTrack != null, 'Audio track should not be null!');
 
     // Elements
     const localVideo = document.getElementById('localVideo');
     localVideo.srcObject = stream;
-    
 
     // Video Track Processor and Reader
     const videoProcessor = new MediaStreamTrackProcessor({ track: videoTrack });
@@ -142,7 +164,7 @@ async function readAndEncodeVideoFrames() {
     const result = await videoReader.read();
     if (result.done) break;
     const frame = result.value;
-    if (videoEncoder.state != 'configured') {
+    if (videoEncoder.state !== 'configured') {
       frame.close();
       return;
     }
@@ -157,7 +179,7 @@ async function readAndEncodeAudioFrames() {
     const result = await audioReader.read();
     if (result.done) break;
     const frame = result.value;
-    if (audioEncoder.state != 'configured') {
+    if (audioEncoder.state !== 'configured') {
       frame.close(); 
       return;
     }
@@ -169,7 +191,6 @@ async function readAndEncodeAudioFrames() {
 async function handleEncodedVideoChunk(chunk) {
   if (!encodingActive) return;
 
-  // Prepare data packet: [type (1 byte), keyFrame (1 byte), chunk data]
   const chunkData = new Uint8Array(chunk.byteLength + 2);
   chunkData[0] = 1; // Type 1 for video
   chunkData[1] = chunk.type === 'key' ? 1 : 0; // Key frame indicator
@@ -181,7 +202,6 @@ async function handleEncodedVideoChunk(chunk) {
 async function handleEncodedAudioChunk(chunk) {
   if (!encodingActive) return;
 
-  // Prepare data packet: [type (1 byte), chunk data]
   const chunkData = new Uint8Array(chunk.byteLength + 1);
   chunkData[0] = 2; // Type 2 for audio
   chunk.copyTo(new Uint8Array(chunkData.buffer, 1));
@@ -210,7 +230,6 @@ async function sendDataToConnections(chunkData) {
 function handleIncomingData(connection, chunkData) {
   const type = chunkData[0];
   if (type === 1) {
-    // Video data
     const isKeyFrame = chunkData[1] === 1;
     const videoData = chunkData.slice(2);
     const videoDecoder = connection.videoDecoder;
@@ -232,14 +251,13 @@ function handleIncomingData(connection, chunkData) {
       }
     }
   } else if (type === 2) {
-    // Audio data
     const audioData = chunkData.slice(1);
     const audioDecoder = connection.audioDecoder;
 
     if (audioDecoder) {
       try {
         const chunk = new EncodedAudioChunk({
-          type: 'key', // For Opus codec, treat all chunks as key frames
+          type: 'key',
           timestamp: performance.now() * 1000,
           data: new Uint8Array(audioData)
         });
@@ -252,7 +270,6 @@ function handleIncomingData(connection, chunkData) {
 }
 
 function createRemoteMediaElements(connection) {
-  // Create a video element for remote media
   const remoteVideoWrapper = document.createElement('div');
   remoteVideoWrapper.className = 'video-wrapper';
   const remoteVideo = document.createElement('video');
@@ -263,21 +280,15 @@ function createRemoteMediaElements(connection) {
   remoteVideoWrapper.appendChild(remoteVideo);
   document.querySelector('.video-container').appendChild(remoteVideoWrapper);
 
-  // Create MediaStreamTrackGenerators
   const videoGenerator = new MediaStreamTrackGenerator({ kind: 'video' });
   const audioGenerator = new MediaStreamTrackGenerator({ kind: 'audio' });
 
-  // Create writable streams
   const videoWritable = videoGenerator.writable.getWriter();
   const audioWritable = audioGenerator.writable.getWriter();
 
-  // Create MediaStream with generated tracks
   const remoteStream = new MediaStream([videoGenerator, audioGenerator]);
-
-  // Set the stream as srcObject of the remote video element
   remoteVideo.srcObject = remoteStream;
 
-  // Create decoders
   const videoDecoder = new VideoDecoder({
     output: (frame) => {
       videoWritable.write(frame).catch((e) => console.error('Video write error:', e));
@@ -311,7 +322,6 @@ function createRemoteMediaElements(connection) {
     numberOfChannels: 2,
   });
 
-  // Assign decoders and elements to the connection
   connection.videoDecoder = videoDecoder;
   connection.audioDecoder = audioDecoder;
   connection.remoteVideo = remoteVideo;
@@ -328,7 +338,6 @@ function handleConnectionClose(connection, reason, error = null) {
   currentConnections = currentConnections.filter(conn => conn !== connection);
   encodingActive = currentConnections.length > 0;
 
-  // Remove remote video element
   const remoteVideo = document.getElementById(`remoteVideo-${connection.id}`);
   if (remoteVideo) {
     remoteVideo.parentElement.remove();
