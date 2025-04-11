@@ -2,6 +2,8 @@
 
 First attempt to have a P2P screen sharing using Pear Runtime.
 
+![Screenshot](images/screenshot.png)
+
 ## Features
 
 - **Real-Time Screen Sharing**: Share your screen (+audio) with minimal latency.

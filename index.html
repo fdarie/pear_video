@@ -8,14 +8,14 @@
         }
 
         #bar {
-            background: rgba(55, 60, 72, 0.6);
+            background: rgba(247, 239, 2, 0.6);
             backdrop-filter: blur(64px);
             -webkit-app-region: drag;
             height: var(--title-bar-height);
             padding: 0;
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
-            color: #FFF;
+            color: #ffffff00;
             white-space: nowrap;
             box-sizing: border-box;
             position: fixed;
@@ -33,6 +33,8 @@
         body {
             --title-bar-height: 42px;
             padding-top: var(--title-bar-height);
+            margin: 0;
+            overflow: hidden; /* Prevent body scrolling */
         }
 
         main {
@@ -52,6 +54,35 @@
             padding: 20px;
             width: 100%;
             justify-content: center;
+            max-height: calc(100vh - var(--title-bar-height) - 60px); /* Adjust based on layout */
+            overflow: auto; /* Enable scrolling when content overflows */
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: rgba(63, 247, 2, 0.6) transparent; /* Firefox */
+        }
+
+        /* Webkit (Chrome, Safari) scrollbar styling */
+        .video-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .video-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .video-container::-webkit-scrollbar-thumb {
+            background: rgba(63, 247, 2, 0.6);
+            border-radius: 4px;
+        }
+
+        .video-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(63, 247, 2, 0.8);
+        }
+
+        /* Hide scrollbars when not needed */
+        .video-container:not(:hover)::-webkit-scrollbar {
+            width: 0;
+            height: 0;
         }
 
         .video-wrapper {
@@ -113,7 +144,7 @@
             <!-- Remote videos will be added here dynamically -->
         </div>
         <div id="peers-count-container">
-            Peers: <span id="peers-count">0</span>
+            Connected Peers: <span id="peers-count">0</span>
         </div>
     </main>
 </body>

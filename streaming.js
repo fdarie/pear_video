@@ -13,6 +13,9 @@ let currentConnections = [];
 let encodeKeyFrameRequired = true;
 let decodeKeyFrameRequired = true;
 let videoSettings = null;
+let lastKeyFrameTime = 0; // Track time of last keyframe
+let lastFrame = null; // Store the last captured frame
+const KEYFRAME_INTERVAL = 1000; // 1 second in milliseconds
 
 export function initializeSwarm() {
   return new Hyperswarm();
@@ -176,17 +179,41 @@ export async function startMediaStreaming(swarm) {
 }
 
 async function readAndEncodeVideoFrames() {
-  while (encodingActive) {
-    const result = await videoReader.read();
-    if (result.done) break;
-    const frame = result.value;
-    if (videoEncoder.state !== 'configured') {
-      frame.close();
-      return;
+  // Start a separate timer to force keyframes every second
+  const forceKeyFrameInterval = setInterval(() => {
+    if (encodingActive && videoEncoder?.state === 'configured' && lastFrame) {
+      // Reuse the last frame to encode a keyframe
+      videoEncoder.encode(lastFrame, { keyFrame: true });
     }
-    videoEncoder.encode(frame, { keyFrame: encodeKeyFrameRequired });
-    frame.close();
-    encodeKeyFrameRequired = false;
+  }, KEYFRAME_INTERVAL);
+
+  try {
+    while (encodingActive) {
+      const result = await videoReader.read();
+      if (result.done) break;
+      const frame = result.value;
+      if (videoEncoder.state !== 'configured') {
+        frame.close();
+        break;
+      }
+
+      // Store the frame for reuse in forced keyframes
+      if (lastFrame) {
+        lastFrame.close(); // Close previous frame to avoid memory leaks
+      }
+      lastFrame = frame;
+
+      // Encode the frame normally (keyframe only if required, e.g., new connection)
+      videoEncoder.encode(frame, { keyFrame: encodeKeyFrameRequired });
+      encodeKeyFrameRequired = false;
+    }
+  } finally {
+    // Clean up interval and last frame when done
+    clearInterval(forceKeyFrameInterval);
+    if (lastFrame) {
+      lastFrame.close();
+      lastFrame = null;
+    }
   }
 }
 
