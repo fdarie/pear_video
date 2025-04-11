@@ -13,7 +13,6 @@ let currentConnections = [];
 let encodeKeyFrameRequired = true;
 let decodeKeyFrameRequired = true;
 let videoSettings = null;
-let lastKeyFrameTime = 0; // Track time of last keyframe
 let lastFrame = null; // Store the last captured frame
 const KEYFRAME_INTERVAL = 1000; // 1 second in milliseconds
 
@@ -135,13 +134,6 @@ export async function startMediaStreaming(swarm) {
       });
     }
 
-    // Start Reading and Encoding Video and Audio Frames
-    encodingActive = true;
-    readAndEncodeVideoFrames();
-    if (ENABLE_AUDIO) {
-      readAndEncodeAudioFrames();
-    }
-
     // Handle Swarm Connections
     swarm.on('connection', async (connection, info) => {
       console.log('Peer connected! Info:', info);
@@ -161,6 +153,16 @@ export async function startMediaStreaming(swarm) {
 
       encodeKeyFrameRequired = true;
       decodeKeyFrameRequired = true;
+      // Start Reading and Encoding Video and Audio Frames
+      if (!encodingActive)
+      {
+        encodingActive = true;
+        readAndEncodeVideoFrames();
+        if (ENABLE_AUDIO) {
+          readAndEncodeAudioFrames();
+        }
+      }
+
       await localVideo.play();
     });
 
@@ -183,6 +185,7 @@ async function readAndEncodeVideoFrames() {
   const forceKeyFrameInterval = setInterval(() => {
     if (encodingActive && videoEncoder?.state === 'configured' && lastFrame) {
       // Reuse the last frame to encode a keyframe
+      console.log('Sending Key Frame (readAndEncodeVideoFrames)');
       videoEncoder.encode(lastFrame, { keyFrame: true });
     }
   }, KEYFRAME_INTERVAL);
@@ -203,6 +206,8 @@ async function readAndEncodeVideoFrames() {
       }
       lastFrame = frame;
 
+      if (encodeKeyFrameRequired)
+        console.log('Sending Key Frame');
       // Encode the frame normally (keyframe only if required, e.g., new connection)
       videoEncoder.encode(frame, { keyFrame: encodeKeyFrameRequired });
       encodeKeyFrameRequired = false;
