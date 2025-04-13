@@ -40,11 +40,7 @@ First attempt to have a P2P screen sharing using Pear Runtime.
 
    ```bash
    npm install
-4. **Change the topic name**
-
-   ```bash
-   https://github.com/fdarie/pear_video/blob/main/streaming.js#L127
-5. **Run two or more instances of the app (local)**
+4. **Run two or more instances of the app (local)**
 
    ```bash
    pear run --no-ask --tmp-store .
