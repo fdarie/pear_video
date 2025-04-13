@@ -3,6 +3,7 @@ import Hyperswarm from 'hyperswarm';
 
 // Global flag to enable/disable audio (set to false to disable audio)
 const ENABLE_AUDIO = false;
+const KEYFRAME_INTERVAL = 5000;
 
 let videoEncoder = null;
 let audioEncoder = null;
@@ -14,7 +15,9 @@ let encodeKeyFrameRequired = true;
 let decodeKeyFrameRequired = true;
 let videoSettings = null;
 let lastFrame = null; // Store the last captured frame
-const KEYFRAME_INTERVAL = 1000; // 1 second in milliseconds
+let mediaStream = null; // Store media stream for cleanup
+let audioStream = null; // Store audio stream for cleanup
+let discovery = null; // Store discovery for leaving swarm
 
 export function initializeSwarm() {
   return new Hyperswarm();
@@ -45,7 +48,7 @@ async function getDesktopSourcesWithRetry(options, retryInterval = 1000, maxRetr
   throw new Error(`Failed to get desktop sources after ${maxRetries} attempts.`);
 }
 
-export async function startMediaStreaming(swarm) {
+export async function startMediaStreaming(swarm, topic) {
   try {
     const options = { types: ['screen'] };
 
@@ -59,7 +62,7 @@ export async function startMediaStreaming(swarm) {
     console.log('Selected source:', selectedSource);
 
     // Request the media stream with the selected source
-    const stream = await navigator.mediaDevices.getUserMedia({
+    mediaStream = await navigator.mediaDevices.getUserMedia({
       video: {
         mandatory: {
           chromeMediaSource: 'desktop',
@@ -68,14 +71,13 @@ export async function startMediaStreaming(swarm) {
       }
     });
 
-    let audioStream = null;
     if (ENABLE_AUDIO) {
       audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
-    console.log('Screen and audio streams captured successfully:', stream, audioStream);
+    console.log('Screen and audio streams captured successfully:', mediaStream, audioStream);
 
     // Get video and audio tracks
-    const videoTrack = stream.getVideoTracks()[0];
+    const videoTrack = mediaStream.getVideoTracks()[0];
     const audioTrack = ENABLE_AUDIO && audioStream ? audioStream.getAudioTracks()[0] : null;
 
     console.assert(videoTrack != null, 'Video track should not be null!');
@@ -85,7 +87,7 @@ export async function startMediaStreaming(swarm) {
 
     // Elements
     const localVideo = document.getElementById('localVideo');
-    localVideo.srcObject = stream;
+    localVideo.srcObject = mediaStream;
 
     // Video Track Processor and Reader
     const videoProcessor = new MediaStreamTrackProcessor({ track: videoTrack });
@@ -154,8 +156,7 @@ export async function startMediaStreaming(swarm) {
       encodeKeyFrameRequired = true;
       decodeKeyFrameRequired = true;
       // Start Reading and Encoding Video and Audio Frames
-      if (!encodingActive)
-      {
+      if (!encodingActive) {
         encodingActive = true;
         readAndEncodeVideoFrames();
         if (ENABLE_AUDIO) {
@@ -167,16 +168,38 @@ export async function startMediaStreaming(swarm) {
     });
 
     // Join Swarm
-    const topic = Buffer.alloc(32).fill('p2p-screen-sharing');
-    console.log('Topic buffer created:', topic);
+    const topicBuffer = Buffer.alloc(32).fill(topic);
+    console.log('Topic buffer created:', topicBuffer);
 
-    const discovery = swarm.join(topic, { client: true, server: true });
+    discovery = swarm.join(topicBuffer, { client: true, server: true });
     await discovery.flushed();
 
-    console.log('Joined the P2P swarm with topic.');
+    console.log(`Joined the P2P swarm with topic: ${topic}`);
   } catch (error) {
     console.error('Error accessing display media:', error);
-    alert(`Failed to start screen capture: ${error.message}`);
+    encodingActive = false;
+    throw error; // Rethrow to let caller handle
+  }
+}
+
+export async function leaveSwarm(swarm) {
+  encodingActive = false;
+
+  // Send disconnect message and close all connections
+  const disconnectPromises = currentConnections.map(async (connection) => {
+    if (!connection.writableEnded) {
+      await sendDisconnectMessage(connection);
+      connection.end();
+      console.log(`Closed connection ${connection.id} after sending disconnect message`);
+    }
+  });
+  await Promise.all(disconnectPromises);
+
+  if (discovery) {
+    await swarm.leave(discovery.topic);
+    await discovery.destroy();
+    discovery = null;
+    console.log('Left the swarm');
   }
 }
 
@@ -184,14 +207,13 @@ async function readAndEncodeVideoFrames() {
   // Start a separate timer to force keyframes every second
   const forceKeyFrameInterval = setInterval(() => {
     if (encodingActive && videoEncoder?.state === 'configured' && lastFrame) {
-      // Reuse the last frame to encode a keyframe
       console.log('Sending Key Frame (readAndEncodeVideoFrames)');
       videoEncoder.encode(lastFrame, { keyFrame: true });
     }
   }, KEYFRAME_INTERVAL);
 
   try {
-    while (encodingActive) {
+    while (encodingActive && videoReader && videoEncoder) {
       const result = await videoReader.read();
       if (result.done) break;
       const frame = result.value;
@@ -200,20 +222,17 @@ async function readAndEncodeVideoFrames() {
         break;
       }
 
-      // Store the frame for reuse in forced keyframes
       if (lastFrame) {
-        lastFrame.close(); // Close previous frame to avoid memory leaks
+        lastFrame.close();
       }
       lastFrame = frame;
 
       if (encodeKeyFrameRequired)
         console.log('Sending Key Frame');
-      // Encode the frame normally (keyframe only if required, e.g., new connection)
       videoEncoder.encode(frame, { keyFrame: encodeKeyFrameRequired });
       encodeKeyFrameRequired = false;
     }
   } finally {
-    // Clean up interval and last frame when done
     clearInterval(forceKeyFrameInterval);
     if (lastFrame) {
       lastFrame.close();
@@ -258,10 +277,17 @@ async function handleEncodedAudioChunk(chunk) {
   await sendDataToConnections(chunkData);
 }
 
+async function sendDisconnectMessage(connection) {
+  const chunkData = new Uint8Array([3]); // Type 3 for disconnect
+  await sendDataToConnections(chunkData);
+}
+
 async function sendDataToConnections(chunkData) {
   const writePromises = currentConnections.map(async (connection) => {
     try {
-      await connection.write(chunkData);
+      if (!connection.writableEnded) {
+        await connection.write(chunkData);
+      }
     } catch (error) {
       console.error(`Failed to write to connection ${connection.id}:`, error);
       return { connection, error };
@@ -315,6 +341,13 @@ function handleIncomingData(connection, chunkData) {
         console.error('Error decoding audio chunk:', error);
       }
     }
+  } else if (type === 3) {
+    // Handle disconnect message
+    console.log(`Received disconnect message from connection ${connection.id}`);
+    handleConnectionClose(connection, 'peer disconnected');
+    if (!connection.writableEnded && !connection.readableEnded) {
+      connection.end(); // Ensure connection is fully closed
+    }
   }
 }
 
@@ -326,7 +359,14 @@ function createRemoteMediaElements(connection) {
   remoteVideo.className = 'remoteVideo';
   remoteVideo.autoplay = true;
   remoteVideo.playsInline = true;
+
+  const zoomButton = document.createElement('button');
+  zoomButton.className = 'zoom-peer-btn';
+  zoomButton.textContent = 'Zoom';
+  zoomButton.dataset.connectionId = connection.id;
+
   remoteVideoWrapper.appendChild(remoteVideo);
+  remoteVideoWrapper.appendChild(zoomButton);
   document.querySelector('.video-container').appendChild(remoteVideoWrapper);
 
   const videoGenerator = new MediaStreamTrackGenerator({ kind: 'video' });
@@ -397,13 +437,23 @@ function handleConnectionClose(connection, reason, error = null) {
     console.error('Connection error details:', error);
   }
 
+  // Ensure connection is removed from currentConnections
+  const initialLength = currentConnections.length;
   currentConnections = currentConnections.filter(conn => conn !== connection);
+  if (currentConnections.length < initialLength) {
+    console.log(`Removed connection ${connection.id} from currentConnections`);
+  } else {
+    console.log(`Connection ${connection.id} was already removed or not found in currentConnections`);
+  }
+
   encodingActive = currentConnections.length > 0;
 
   const remoteVideo = document.getElementById(`remoteVideo-${connection.id}`);
   if (remoteVideo) {
     remoteVideo.parentElement.remove();
-    console.log(`Removed remote video element for connection ${connection.id}.`);
+    console.log(`Removed remote video element for connection ${connection.id}`);
+  } else {
+    console.log(`No remote video element found for connection ${connection.id}`);
   }
 
   document.getElementById('peers-count').textContent = currentConnections.length;

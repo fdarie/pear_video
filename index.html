@@ -129,6 +129,42 @@
             color: #FFF;
             font-size: 16px;
         }
+
+        /* New styles for topic input and buttons */
+        .controls-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+        }
+
+        #topic-input {
+            padding: 5px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background: #222;
+            color: white;
+            font-size: 16px;
+        }
+
+        #join-btn, #disconnect-btn {
+            padding: 5px 15px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(63, 247, 2, 0.6);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #join-btn:hover, #disconnect-btn:hover {
+            background: rgba(63, 247, 2, 0.8);
+        }
+
+        #join-btn:disabled, #disconnect-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
     </style>
     <script type="module" src="./app.js"></script>
 </head>
@@ -136,6 +172,12 @@
 <body>
     <div id="bar"><pear-ctrl></pear-ctrl></div>
     <main>
+        <!-- New controls container for topic input and buttons -->
+        <div class="controls-container">
+            <input id="topic-input" type="text" placeholder="Enter swarm topic" />
+            <button id="join-btn">Join</button>
+            <button id="disconnect-btn" disabled>Disconnect</button>
+        </div>
         <div class="video-container">
             <div class="video-wrapper">
                 <video id="localVideo" muted autoplay playsinline></video>
